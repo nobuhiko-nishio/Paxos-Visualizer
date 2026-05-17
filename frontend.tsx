@@ -10,7 +10,6 @@ interface NodeState {
   type: "proposer" | "acceptor";
   value: Value | null;
   isAccepted: boolean;
-  // P2 specific fields
   promisedN: number; 
 }
 
@@ -19,7 +18,7 @@ interface MessageAnimation {
   fromId: string;
   toId: string;
   value: string;
-  proposalN?: number; // For P2
+  proposalN: number; 
 }
 
 const NodeComponent = ({ node, x, y }: { node: NodeState; x: number; y: number }) => {
@@ -45,6 +44,9 @@ const NodeComponent = ({ node, x, y }: { node: NodeState; x: number; y: number }
       }`}>
         {node.value ? `Val: ${node.value}` : "Empty"}
       </div>
+      {!isProposer && node.promisedN > 0 && (
+        <div className="text-[8px] text-red-400 font-mono mt-1">Promise: {node.promisedN}</div>
+      )}
     </div>
   );
 };
@@ -56,7 +58,6 @@ const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival }: { msg: 
     const timer = setInterval(() => {
       setProgress((p) => {
         if (p >= 1) {
-          // Use setTimeout to ensure the state update happens outside of the render cycle
           setTimeout(() => onArrival(msg.id), 0);
           return 1;
         }
@@ -75,23 +76,14 @@ const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival }: { msg: 
       style={{ left: `${currentX}px`, top: `${currentY}px`, transform: "translate(-50%, -50%)" }}
     >
       {msg.value}
+      <div className="absolute -bottom-4 text-[8px] text-white whitespace-nowrap">N={msg.proposalN}</div>
     </div>
   );
 };
 
 const App = () => {
   const [mode, setMode] = useState<Mode>("P1");
-  const [nodes, setNodes] = useState<NodeState[]>([
-    { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0 },
-    { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0 },
-    { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0 },
-    { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-    { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-    { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-    { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-    { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-  ]);
-
+  const [nodes, setNodes] = useState<NodeState[]>([]);
   const [messages, setMessages] = useState<MessageAnimation[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -100,10 +92,13 @@ const App = () => {
     if (id === "p2") return { x: 200, y: 250 };
     if (id === "p3") return {x: 600, y: 250 };
     if (id === "a1") return { x: 200, y: 450 };
-    if (id === "a2") return { x: 300, y: 550 };
-    if (id === "a3") return { x: 400, y: 450 };
-    if (id === "a4") return { x: 500, y: 550 };
-    if (id === "a5") return { x: 600, y: 450 };
+    if (id.startsWith("a")) {
+        const parts = id.split("");
+        const num = parseInt(parts[1]);
+        const xBase = 200 + (num - 1) * 100;
+        const yBase = num % 2 === 0 ? 550 : 450;
+        return { x: xBase, y: yBase };
+    }
     return { x: 400, y: 350 };
   };
 
@@ -111,18 +106,11 @@ const App = () => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 15));
   };
 
-  const handleMessageArrival = (msgId: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== msgId));
-  };
-
-  const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN?: number) => {
+  const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN: number) => {
     const msgId = Math.random().toString(36).substring(7);
-    
     setTimeout(() => {
       setMessages((prev) => [...prev, { id: msgId, fromId, toId, value, proposalN }]);
-      addLog(`${fromId} -> ${toId}: ${value}${proposalN ? ` (N=${proposalN})` : ""}`);
-
-      // The update will happen via onArrival in MessageParticle.
+      addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`);
     }, delay);
   };
 
@@ -161,7 +149,8 @@ const App = () => {
         const baseDelay = 1000 + (idx * 500); 
 
         targets.forEach((target, i) => {
-          sendMessage(pId, target, val, baseDelay + i * 800);
+          const proposalN = (1 << 16) | (idx + 1); // Simplified for demo
+          sendMessage(pId, target, val, baseDelay + i * 800, proposalN);
         });
       });
     }, 1000);
@@ -213,7 +202,6 @@ const App = () => {
               endX={endPos.x} 
               endY={endPos.y} 
               onArrival={(id) => {
-                // Update node state when message arrives
                 setNodes((prev) =>
                   prev.map((n) => 
                     n.id === msg.toId 
@@ -221,7 +209,6 @@ const App = () => {
                       : n
                   )
                 );
-                // Remove message from animation list
                 setMessages((prev) => prev.filter((m) => m.id !== id));
               }}
             />
