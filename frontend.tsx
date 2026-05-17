@@ -56,7 +56,8 @@ const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival }: { msg: 
     const timer = setInterval(() => {
       setProgress((p) => {
         if (p >= 1) {
-          onArrival(msg.id);
+          // Use setTimeout to ensure the state update happens outside of the render cycle
+          setTimeout(() => onArrival(msg.id), 0);
           return 1;
         }
         return p + 0.02;
@@ -99,12 +100,10 @@ const App = () => {
     if (id === "p2") return { x: 200, y: 250 };
     if (id === "p3") return {x: 600, y: 250 };
     if (id === "a1") return { x: 200, y: 450 };
-    if (id.startsWith("a")) {
-        const num = parseInt(id.substring(1));
-        const xBase = 200 + (num - 1) * 100;
-        const y = num % 2 === 0 ? 550 : 450;
-        return { x: xBase, y };
-    }
+    if (id === "a2") { return { x: 300, y: 550 }; }
+    if (id === "a3") return { x: 400, y: 450 };
+    if (id === "a4") { return { x: 500, y: 550 }; }
+    if (id === "a5") return { x: 600, y: 450 };
     return { x: 400, y: 350 };
   };
 
@@ -184,7 +183,7 @@ const App = () => {
               onClick={() => { setMode("P2"); setNodes([...nodes]); }}
               className={`px-3 py-0.5 rounded text-xs font-bold transition-all ${mode === "P2" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
             >
-              P2 (Paxos)
+              P2 (Numbered)
             </button>
           </div>
         </div>
