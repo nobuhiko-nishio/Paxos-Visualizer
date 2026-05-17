@@ -100,9 +100,9 @@ const App = () => {
     if (id === "p2") return { x: 200, y: 250 };
     if (id === "p3") return {x: 600, y: 250 };
     if (id === "a1") return { x: 200, y: 450 };
-    if (id === "a2") { return { x: 300, y: 550 }; }
+    if (id === "a2") return { x: 300, y: 550 };
     if (id === "a3") return { x: 400, y: 450 };
-    if (id === "a4") { return { x: 500, y: 550 }; }
+    if (id === "a4") return { x: 500, y: 550 };
     if (id === "a5") return { x: 600, y: 450 };
     return { x: 400, y: 350 };
   };
