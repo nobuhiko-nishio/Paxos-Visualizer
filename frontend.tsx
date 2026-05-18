@@ -11,7 +11,8 @@ interface NodeState {
   type: "proposer" | "acceptor";
   value: Value | null; 
   isAccepted: boolean;
-  promisedN: number;   
+  promisedN: number;
+  acceptedInfos: string[];
 }
 
 interface LogEntry {
@@ -57,6 +58,11 @@ const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: nu
        )}
        {!isProposer && mode === "P2b" && node.promisedN > 0 && (
          <div className="text-[8px] text-orange-400 font-mono mt-1">Accepted: {node.promisedN}</div>
+       )}
+       {isProposer && mode === "P2b" && node.acceptedInfos.length > 0 && (
+         <div className="mt-1 text-[8px] text-cyan-400 font-mono bg-cyan-900/50 px-1 rounded">
+           Infos: {node.acceptedInfos.join(", ")}
+         </div>
        )}
     </div>
   );
@@ -132,14 +138,14 @@ const App = () => {
 
   const runScenario = async () => {
     setNodes([
-      { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0 },
-      { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0 },
-      { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0 },
-      { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-      { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-      { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-      { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
-      { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0 },
+      { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+      { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+      { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+      { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+      { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+      { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+      { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+      { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
     ]);
     setMessages([]);
     setLogs([]);
@@ -262,11 +268,31 @@ const App = () => {
                   addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
                 }
               } else if (mode === "P2b") {
-                // P2b: Acceptor Info mode. 常に最新の提案番号を記録し、値も更新する。
-                addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                // P2b: Acceptor Info mode. 提案番号による比較を行い、承諾時にProposerへ返信する。
+                if (arrivingMsg.proposalN > targetNode.promisedN) {
+                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                  setNodes(prevNodes => prevNodes.map(n => {
+                    if (n.id === targetNode.id) {
+                      return { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true };
+                    }
+                    return n;
+                  }));
+                  // Proposerへ受理情報を返信
+                  const replyMsgId = Math.random().toString(36).substring(7);
+                  setMessages(prev => [...prev, { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `OK:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN }]);
+                  addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
+                } else {
+                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
+                }
+              }
+            } else if (targetNode && targetNode.type === "proposer") {
+              // Proposerが返信メッセージを受け取った場合の処理
+              if (mode === "P2b" && arrivingMsg.value.startsWith("OK:")) {
+                const info = arrivingMsg.value.replace("OK:", "");
+                addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${info} collected`, "success", targetNode.id);
                 setNodes(prevNodes => prevNodes.map(n => {
                   if (n.id === targetNode.id) {
-                    return { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true };
+                    return { ...n, acceptedInfos: [...n.acceptedInfos, info] };
                   }
                   return n;
                 }));
@@ -288,6 +314,15 @@ const App = () => {
           >
             All
           </button>
+          {nodes.filter(n => n.type === "proposer").map(n => (
+            <button 
+              key={n.id}
+              onClick={() => setCurrentTab(n.id)}
+              className={`flex-1 py-1 px-2 transition-colors ${currentTab === n.id ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
+            >
+              {n.id.toUpperCase()}
+            </button>
+          ))}
           {nodes.filter(n => n.type === "acceptor").map(n => (
             <button 
               key={n.id}
