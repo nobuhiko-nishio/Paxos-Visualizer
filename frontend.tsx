@@ -4,13 +4,21 @@ import { createRoot } from "react-dom/client";
 // --- Types ---
 type Value = string;
 type Mode = "P1" | "P2";
+type LogType = "info" | "success" | "error" | "warning";
 
 interface NodeState {
   id: string;
   type: "proposer" | "acceptor";
-  value: Value | null;
+  value: Value | null; 
   isAccepted: boolean;
-  promisedN: number; 
+  promisedN: number;   
+}
+
+interface LogEntry {
+  timestamp: string;
+  message: string;
+  targetNodeId?: string; 
+  type: LogType;
 }
 
 interface MessageAnimation {
@@ -21,7 +29,7 @@ interface MessageAnimation {
   proposalN: number; 
 }
 
-const NodeComponent = ({ node, x, y }: { node: NodeState; x: number; y: number }) => {
+const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: number; mode: Mode }) => {
   const isProposer = node.type === "proposer";
   return (
     <div
@@ -39,19 +47,19 @@ const NodeComponent = ({ node, x, y }: { node: NodeState; x: number; y: number }
       >
         {node.id}
       </div>
-      <div className={`mt-1 text-[10px] font-mono px-2 py-0.5 rounded text-center w-20 truncate ${
+      <div className={`mt-1 text-[10px] font-mono px-2 py-0.5 rounded text-center w-24 truncate ${
         node.isAccepted ? "bg-yellow-600 text-white" : "bg-black/50 text-slate-300"
       }`}>
         {node.value ? `Val: ${node.value}` : "Empty"}
       </div>
-      {!isProposer && node.promisedN > 0 && (
+      {!isProposer && mode === "P2" && node.promisedN > 0 && (
         <div className="text-[8px] text-red-400 font-mono mt-1">Promise: {node.promisedN}</div>
       )}
     </div>
   );
 };
 
-const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival }: { msg: MessageAnimation; startX: number; startY: number; endX: number; endY: number; onArrival: (id: string) => void }) => {
+const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival, mode }: { msg: MessageAnimation; startX: number; startY: number; endX: number; endY: number; onArrival: (id: string) => void; mode: Mode }) => {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -76,7 +84,9 @@ const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival }: { msg: 
       style={{ left: `${currentX}px`, top: `${currentY}px`, transform: "translate(-50%, -50%)" }}
     >
       {msg.value}
-      <div className="absolute -bottom-4 text-[8px] text-white whitespace-nowrap">N={msg.proposalN}</div>
+      {mode === "P2" && (
+        <div className="absolute -bottom-4 text-[8px] text-white whitespace-nowrap">N={msg.proposalN}</div>
+      )}
     </div>
   );
 };
@@ -85,13 +95,16 @@ const App = () => {
   const [mode, setMode] = useState<Mode>("P1");
   const [nodes, setNodes] = useState<NodeState[]>([]);
   const [messages, setMessages] = useState<MessageAnimation[]>([]);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [selectedTab, setSelectedTab] = useState<string>("all");
+
+  // Re-defining the state to be clean
+  const [currentTab, setCurrentTab] = useState<string>("all");
 
   const getPosition = (id: string) => {
     if (id === "p1") return { x: 400, y: 150 };
     if (id === "p2") return { x: 200, y: 250 };
     if (id === "p3") return {x: 600, y: 250 };
-    if (id === "a1") return { x: 200, y: 450 };
     if (id.startsWith("a")) {
         const parts = id.split("");
         const num = parseInt(parts[1]);
@@ -102,15 +115,15 @@ const App = () => {
     return { x: 400, y: 350 };
   };
 
-  const addLog = (msg: string) => {
-    setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 15));
+  const addLog = (message: string, type: LogType = "info", targetNodeId?: string) => {
+    setLogs((prev) => [{ timestamp: new Date().toLocaleTimeString(), message, targetNodeId, type }, ...prev].slice(0, 50));
   };
 
   const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN: number) => {
     const msgId = Math.random().toString(36).substring(7);
     setTimeout(() => {
       setMessages((prev) => [...prev, { id: msgId, fromId, toId, value, proposalN }]);
-      addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`);
+      addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", toId);
     }, delay);
   };
 
@@ -127,13 +140,14 @@ const App = () => {
     ]);
     setMessages([]);
     setLogs([]);
+    setCurrentTab("all");
 
-    addLog(`Starting Scenario (Mode: ${mode})...`);
+    addLog(`Starting Scenario (Mode: ${mode})...`, "info");
     
     const shuffle = (array: string[]) => [...array].sort(() => Math.random() - 0.5);
 
     setTimeout(() => {
-      addLog("Proposers starting broadcasts...");
+      addLog("Proposers starting broadcasts...", "info");
       const proposerOrder = shuffle(["p1", "p2", "p3"]);
       
       const targetsP1 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
@@ -141,15 +155,21 @@ const App = () => {
       const targetsP3 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
 
       const allTargets = [targetsP1, targetsP2, targetsP3];
-      const allValues = ["A", "B", "C"];
+      // 提案値のマップを定義（Proposer IDに紐付け）
+      const valueMap: { [key: string]: string } = {
+        "p1": "A",
+        "p2": "B",
+        "p3": "C"
+      };
 
       proposerOrder.forEach((pId, idx) => {
         const targets = allTargets[idx];
-        const val = allValues[idx];
+        const val = valueMap[pId] || "X"; // 念のためのフォールバック
         const baseDelay = 1000 + (idx * 500); 
 
         targets.forEach((target, i) => {
-          const proposalN = (1 << 16) | (idx + 1); // Simplified for demo
+          // P1の場合は提案番号を0にする。P2の場合は大きな値を生成する。
+          const proposalN = mode === "P1" ? 0 : (1 << 16) | (idx + 1);
           sendMessage(pId, target, val, baseDelay + i * 800, proposalN);
         });
       });
@@ -187,7 +207,7 @@ const App = () => {
       <div className="w-full h-full relative">
         {nodes.map((node) => {
           const pos = getPosition(node.id);
-          return <NodeComponent key={node.id} node={node} x={pos.x} y={pos.y} />;
+          return <NodeComponent key={node.id} node={node} x={pos.x} y={pos.y} mode={mode} />;
         })}
 
         {messages.map((msg) => {
@@ -201,31 +221,77 @@ const App = () => {
               startY={startPos.y} 
               endX={endPos.x} 
               endY={endPos.y} 
-              onArrival={(id) => {
-                setNodes((prev) =>
-                  prev.map((n) => 
-                    n.id === msg.toId 
-                      ? { ...n, value: n.value || msg.value, isAccepted: !n.value } 
-                      : n
-                  )
-                );
-                setMessages((prev) => prev.filter((m) => m.id !== id));
-              }}
-            />
+        onArrival={(id) => {
+          const arrivingMsg = messages.find(m => m.id === msg.id);
+          if (arrivingMsg) {
+            const targetNode = nodes.find(n => n.id === arrivingMsg.toId);
+            if (targetNode && targetNode.type === "acceptor") {
+              if (mode === "P1") {
+                // P1: 提案番号の概念なし。Emptyなノードのみ、届いた値を書き換える（上書き禁止）。
+                if (!targetNode.value) {
+                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value}`, "success", targetNode.id);
+                  setNodes(prevNodes => prevNodes.map(n => {
+                    if (n.id === targetNode.id) {
+                      return { ...n, value: arrivingMsg.value, isAccepted: true };
+                    }
+                    return n;
+                  }));
+                } else {
+                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Already has value: ${targetNode.value})`, "info", targetNode.id);
+                }
+              } else {
+                // P2: 提案番号による比較。
+                if (arrivingMsg.proposalN > targetNode.promisedN) {
+                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                  setNodes(prevNodes => prevNodes.map(n => {
+                    if (n.id === targetNode.id) {
+                      return { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true };
+                    }
+                    return n;
+                  }));
+                } else {
+                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
+                }
+              }
+            }
+          }
+          setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+        }}
+             />
           );
         })}
       </div>
 
-      <div className="absolute bottom-4 right-4 w-80 h-64 bg-black/70 border border-slate-700 p-4 rounded-lg overflow-y-auto text-xs font-mono z-20 shadow-2xl">
-        <h2 className="text-slate-400 mb-2 border-b border-slate-700 pb-1">Event Log</h2>
-        {logs.length === 0 && <div className="text-slate-600 italic">No events recorded...</div>}
-        {logs.map((log, i) => (
-          <div key={i} className="mb-1 text-slate-300 border-l-2 border-blue-500 pl-2">{log}</div>
-        ))}
-      </div>
-
-      <div className="absolute bottom-4 left-4 text-slate-500 text-xs bg-black/30 p-2 rounded">
-        Click "Run Scenario" to simulate the collision.
+      <div className="absolute bottom-4 right-4 w-80 h-64 bg-black/70 border border-slate-700 rounded-lg overflow-hidden z-20 shadow-2xl flex flex-col">
+        <div className="flex bg-slate-800 border-b border-slate-700 text-[10px] font-bold">
+          <button 
+            onClick={() => setCurrentTab("all")}
+            className={`flex-1 py-1 px-2 transition-colors ${currentTab === "all" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
+          >
+            All
+          </button>
+          {nodes.filter(n => n.type === "acceptor").map(n => (
+            <button 
+              key={n.id}
+              onClick={() => setCurrentTab(n.id)}
+              className={`flex-1 py-1 px-2 transition-colors ${currentTab === n.id ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
+            >
+              {n.id.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 font-mono text-[10px]">
+          {logs.filter(log => currentTab === "all" || log.targetNodeId === currentTab).map((log, i) => (
+            <div key={i} className={`mb-1 border-l-2 pl-2 ${
+              log.type === "success" ? "border-green-500 text-green-400" : 
+              log.type === "error" ? "border-red-500 text-red-400" : 
+              log.type === "warning" ? "border-yellow-500 text-yellow-400" : 
+              "border-blue-500 text-slate-300"
+            }`}>
+              <span className="opacity-50 mr-1">[{log.timestamp}]</span> {log.message}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
