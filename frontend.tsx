@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 // --- Types ---
 type Value = string;
-type Mode = "P1" | "P2";
+type Mode = "P1" | "P2" | "P2b";
 type LogType = "info" | "success" | "error" | "warning";
 
 interface NodeState {
@@ -52,9 +52,12 @@ const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: nu
       }`}>
         {node.value ? `Val: ${node.value}` : "Empty"}
       </div>
-      {!isProposer && mode === "P2" && node.promisedN > 0 && (
-        <div className="text-[8px] text-red-400 font-mono mt-1">Promise: {node.promisedN}</div>
-      )}
+       {!isProposer && mode === "P2" && node.promisedN > 0 && (
+         <div className="text-[8px] text-red-400 font-mono mt-1">Promise: {node.promisedN}</div>
+       )}
+       {!isProposer && mode === "P2b" && node.promisedN > 0 && (
+         <div className="text-[8px] text-orange-400 font-mono mt-1">Accepted: {node.promisedN}</div>
+       )}
     </div>
   );
 };
@@ -194,6 +197,12 @@ const App = () => {
             >
               P2 (Numbered)
             </button>
+            <button 
+              onClick={() => { setMode("P2b"); setNodes([...nodes]); }}
+              className={`px-3 py-0.5 rounded text-xs font-bold transition-all ${mode === "P2b" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+            >
+              P2b (Acceptor Info)
+            </button>
           </div>
         </div>
         <button 
@@ -239,7 +248,7 @@ const App = () => {
                 } else {
                   addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Already has value: ${targetNode.value})`, "info", targetNode.id);
                 }
-              } else {
+              } else if (mode === "P2") {
                 // P2: 提案番号による比較。
                 if (arrivingMsg.proposalN > targetNode.promisedN) {
                   addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
@@ -252,6 +261,15 @@ const App = () => {
                 } else {
                   addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
                 }
+              } else if (mode === "P2b") {
+                // P2b: Acceptor Info mode. 常に最新の提案番号を記録し、値も更新する。
+                addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                setNodes(prevNodes => prevNodes.map(n => {
+                  if (n.id === targetNode.id) {
+                    return { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true };
+                  }
+                  return n;
+                }));
               }
             }
           }
