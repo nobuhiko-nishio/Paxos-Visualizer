@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 // --- Types ---
 type Value = string;
-type Mode = "P1" | "P2" | "P2b";
+type Mode = "P1" | "P2" | "P2b" | "P2c";
 type LogType = "info" | "success" | "error" | "warning";
 
 interface NodeState {
@@ -29,6 +29,17 @@ interface MessageAnimation {
   value: string;
   proposalN: number; 
 }
+
+const defaultNodes: NodeState[] = [
+  { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+];
 
 const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: number; mode: Mode }) => {
   const isProposer = node.type === "proposer";
@@ -59,7 +70,10 @@ const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: nu
        {!isProposer && mode === "P2b" && node.promisedN > 0 && (
          <div className="text-[8px] text-orange-400 font-mono mt-1">Accepted: {node.promisedN}</div>
        )}
-       {isProposer && mode === "P2b" && node.acceptedInfos.length > 0 && (
+       {!isProposer && mode === "P2c" && node.promisedN > 0 && (
+         <div className="text-[8px] text-purple-400 font-mono mt-1">Promised: {node.promisedN}</div>
+       )}
+       {isProposer && (mode === "P2b" || mode === "P2c") && node.acceptedInfos.length > 0 && (
          <div className="mt-1 text-[8px] text-cyan-400 font-mono bg-cyan-900/50 px-1 rounded">
            Infos: {node.acceptedInfos.join(", ")}
          </div>
@@ -68,21 +82,21 @@ const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: nu
   );
 };
 
-const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival, mode }: { msg: MessageAnimation; startX: number; startY: number; endX: number; endY: number; onArrival: (id: string) => void; mode: Mode }) => {
+const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival, mode }: { msg: MessageAnimation; startX: number; startY: number; endX: number; endY: number; onArrival: (msg: MessageAnimation) => void; mode: Mode }) => {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setProgress((p) => {
         if (p >= 1) {
-          setTimeout(() => onArrival(msg.id), 0);
+          setTimeout(() => onArrival(msg), 0);
           return 1;
         }
         return p + 0.02;
       });
     }, 50);
     return () => clearInterval(timer);
-  }, [msg.id, onArrival]);
+  }, [msg, onArrival]);
 
   const currentX = startX + (endX - startX) * progress;
   const currentY = startY + (endY - startY) * progress;
@@ -102,12 +116,9 @@ const MessageParticle = ({ msg, startX, startY, endX, endY, onArrival, mode }: {
 
 const App = () => {
   const [mode, setMode] = useState<Mode>("P1");
-  const [nodes, setNodes] = useState<NodeState[]>([]);
+  const [nodes, setNodes] = useState<NodeState[]>(defaultNodes);
   const [messages, setMessages] = useState<MessageAnimation[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [selectedTab, setSelectedTab] = useState<string>("all");
-
-  // Re-defining the state to be clean
   const [currentTab, setCurrentTab] = useState<string>("all");
 
   const getPosition = (id: string) => {
@@ -125,7 +136,7 @@ const App = () => {
   };
 
   const addLog = (message: string, type: LogType = "info", targetNodeId?: string) => {
-    setLogs((prev) => [{ timestamp: new Date().toLocaleTimeString(), message, targetNodeId, type }, ...prev].slice(0, 50));
+    setLogs((prev) => [{ timestamp: new Date().toLocaleTimeString(), message, targetNodeId, type }, ...prev].slice(0, 150));
   };
 
   const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN: number) => {
@@ -133,27 +144,25 @@ const App = () => {
     setTimeout(() => {
       setMessages((prev) => [...prev, { id: msgId, fromId, toId, value, proposalN }]);
       addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", toId);
+      addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", fromId);
     }, delay);
   };
 
-  const runScenario = async () => {
-    setNodes([
-      { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-      { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-      { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-      { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-      { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-      { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-      { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-      { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-    ]);
+  const step = async () => {
+    // Clear messages to remove old animations, but keep logs and node state
     setMessages([]);
-    setLogs([]);
-    setCurrentTab("all");
-
-    addLog(`Starting Scenario (Mode: ${mode})...`, "info");
+    
+    addLog(`Step executed (Mode: ${mode})...`, "info");
     
     const shuffle = (array: string[]) => [...array].sort(() => Math.random() - 0.5);
+    
+    const proposalMap: { [key: string]: number } = {
+      "p1": Math.floor(Math.random() * 90) + 10,
+      "p2": Math.floor(Math.random() * 90) + 10,
+      "p3": Math.floor(Math.random() * 90) + 10,
+    };
+
+    addLog(`Proposal Numbers: p1=${proposalMap.p1}, p2=${proposalMap.p2}, p3=${proposalMap.p3}`, "info");
 
     setTimeout(() => {
       addLog("Proposers starting broadcasts...", "info");
@@ -164,7 +173,6 @@ const App = () => {
       const targetsP3 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
 
       const allTargets = [targetsP1, targetsP2, targetsP3];
-      // 提案値のマップを定義（Proposer IDに紐付け）
       const valueMap: { [key: string]: string } = {
         "p1": "A",
         "p2": "B",
@@ -173,16 +181,23 @@ const App = () => {
 
       proposerOrder.forEach((pId, idx) => {
         const targets = allTargets[idx];
-        const val = valueMap[pId] || "X"; // 念のためのフォールバック
-        const baseDelay = 1000 + (idx * 500); 
+        const val = mode === "P2c" ? "Prepare" : (valueMap[pId] || "X");
+        const baseDelay = 1000 + (idx * 2000); 
 
         targets.forEach((target, i) => {
-          // P1の場合は提案番号を0にする。P2の場合は大きな値を生成する。
-          const proposalN = mode === "P1" ? 0 : (1 << 16) | (idx + 1);
-          sendMessage(pId, target, val, baseDelay + i * 800, proposalN);
+          const proposalN = mode === "P1" ? 0 : proposalMap[pId];
+          sendMessage(pId, target, val, baseDelay + i * 600, proposalN);
         });
       });
-    }, 1000);
+    }, 500);
+  };
+
+  const reset = () => {
+    setNodes(defaultNodes);
+    setMessages([]);
+    setLogs([]);
+    setCurrentTab("all");
+    addLog("System Reset.", "info");
   };
 
   return (
@@ -192,31 +207,45 @@ const App = () => {
           <h1 className="text-xl font-bold text-blue-400">Paxos Visualizer</h1>
           <div className="flex bg-slate-800 rounded p-1 border border-slate-700">
             <button 
-              onClick={() => { setMode("P1"); setNodes([...nodes]); }}
+              onClick={() => { setMode("P1"); reset(); }}
               className={`px-3 py-0.5 rounded text-xs font-bold transition-all ${mode === "P1" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
             >
               P1 (Basic)
             </button>
             <button 
-              onClick={() => { setMode("P2"); setNodes([...nodes]); }}
+              onClick={() => { setMode("P2"); reset(); }}
               className={`px-3 py-0.5 rounded text-xs font-bold transition-all ${mode === "P2" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
             >
               P2 (Numbered)
             </button>
             <button 
-              onClick={() => { setMode("P2b"); setNodes([...nodes]); }}
+              onClick={() => { setMode("P2b"); reset(); }}
               className={`px-3 py-0.5 rounded text-xs font-bold transition-all ${mode === "P2b" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
             >
               P2b (Acceptor Info)
             </button>
+            <button 
+              onClick={() => { setMode("P2c"); reset(); }}
+              className={`px-3 py-0.5 rounded text-xs font-bold transition-all ${mode === "P2c" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+            >
+              P2c (Promise)
+            </button>
           </div>
         </div>
-        <button 
-          onClick={runScenario}
-          className="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95"
-        >
-          Run Scenario
-        </button>
+        <div className="flex gap-2">
+            <button 
+            onClick={step}
+            className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95"
+            >
+            Step
+            </button>
+            <button 
+            onClick={reset}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95"
+            >
+            Reset
+            </button>
+        </div>
       </div>
 
       <div className="w-full h-full relative">
@@ -236,72 +265,73 @@ const App = () => {
               startY={startPos.y} 
               endX={endPos.x} 
               endY={endPos.y} 
-        onArrival={(id) => {
-          const arrivingMsg = messages.find(m => m.id === msg.id);
-          if (arrivingMsg) {
-            const targetNode = nodes.find(n => n.id === arrivingMsg.toId);
-            if (targetNode && targetNode.type === "acceptor") {
-              if (mode === "P1") {
-                // P1: 提案番号の概念なし。Emptyなノードのみ、届いた値を書き換える（上書き禁止）。
-                if (!targetNode.value) {
-                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value}`, "success", targetNode.id);
-                  setNodes(prevNodes => prevNodes.map(n => {
-                    if (n.id === targetNode.id) {
-                      return { ...n, value: arrivingMsg.value, isAccepted: true };
+              onArrival={(arrivingMsg) => {
+                setNodes(prevNodes => {
+                  const targetNode = prevNodes.find(n => n.id === arrivingMsg.toId);
+                  if (!targetNode) return prevNodes;
+
+                  if (targetNode.type === "acceptor") {
+                    if (mode === "P1") {
+                      if (!targetNode.value) {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value}`, "success", targetNode.id);
+                        return prevNodes.map(n => n.id === targetNode.id ? { ...n, value: arrivingMsg.value, isAccepted: true } : n);
+                      } else {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Already has value: ${targetNode.value})`, "info", targetNode.id);
+                      }
+                    } else if (mode === "P2") {
+                      if (arrivingMsg.proposalN > targetNode.promisedN) {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                        return prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true } : n);
+                      } else {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                      }
+                    } else if (mode === "P2b") {
+                      if (arrivingMsg.proposalN > targetNode.promisedN) {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                        const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true } : n);
+                        
+                        const replyMsgId = Math.random().toString(36).substring(7);
+                        const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `OK:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN };
+                        setMessages(prev => [...prev, replyMsg]);
+                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
+                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
+                        return updatedNodes;
+                      } else {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                      }
+                    } else if (mode === "P2c") {
+                      if (arrivingMsg.proposalN > targetNode.promisedN) {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Prepare (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                        const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN, value: null, isAccepted: false } : n);
+                        
+                        const replyMsgId = Math.random().toString(36).substring(7);
+                        const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `Promise`, proposalN: arrivingMsg.proposalN };
+                        setMessages(prev => [...prev, replyMsg]);
+                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Promise (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
+                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Promise (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
+                        return updatedNodes;
+                      } else {
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                      }
                     }
-                    return n;
-                  }));
-                } else {
-                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Already has value: ${targetNode.value})`, "info", targetNode.id);
-                }
-              } else if (mode === "P2") {
-                // P2: 提案番号による比較。
-                if (arrivingMsg.proposalN > targetNode.promisedN) {
-                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
-                  setNodes(prevNodes => prevNodes.map(n => {
-                    if (n.id === targetNode.id) {
-                      return { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true };
+                  } else if (targetNode.type === "proposer") {
+                    if (mode === "P2b" && arrivingMsg.value.startsWith("OK:")) {
+                      const info = arrivingMsg.value.replace("OK:", "");
+                      addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${info} collected`, "success", targetNode.id);
+                      return prevNodes.map(n => n.id === targetNode.id ? { ...n, acceptedInfos: [...n.acceptedInfos, info] } : n);
+                    } else if (mode === "P2c" && arrivingMsg.value === "Promise") {
+                      addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Promise collected`, "success", targetNode.id);
+                      return prevNodes.map(n => n.id === targetNode.id ? { ...n, acceptedInfos: [...n.acceptedInfos, `P(${arrivingMsg.proposalN})`] } : n);
                     }
-                    return n;
-                  }));
-                } else {
-                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
-                }
-              } else if (mode === "P2b") {
-                // P2b: Acceptor Info mode. 提案番号による比較を行い、承諾時にProposerへ返信する。
-                if (arrivingMsg.proposalN > targetNode.promisedN) {
-                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
-                  setNodes(prevNodes => prevNodes.map(n => {
-                    if (n.id === targetNode.id) {
-                      return { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true };
-                    }
-                    return n;
-                  }));
-                  // Proposerへ受理情報を返信
-                  const replyMsgId = Math.random().toString(36).substring(7);
-                  setMessages(prev => [...prev, { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `OK:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN }]);
-                  addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
-                } else {
-                  addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
-                }
-              }
-            } else if (targetNode && targetNode.type === "proposer") {
-              // Proposerが返信メッセージを受け取った場合の処理
-              if (mode === "P2b" && arrivingMsg.value.startsWith("OK:")) {
-                const info = arrivingMsg.value.replace("OK:", "");
-                addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${info} collected`, "success", targetNode.id);
-                setNodes(prevNodes => prevNodes.map(n => {
-                  if (n.id === targetNode.id) {
-                    return { ...n, acceptedInfos: [...n.acceptedInfos, info] };
                   }
-                  return n;
-                }));
-              }
-            }
-          }
-          setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-        }}
-             />
+                  return prevNodes;
+                });
+                setMessages((prev) => prev.filter((m) => m.id !== arrivingMsg.id));
+              }}
+            />
           );
         })}
       </div>
