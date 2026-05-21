@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 type Value = string;
 type Mode = "P1" | "P2" | "P2b" | "P2c";
 type LogType = "info" | "success" | "error" | "warning";
+type Phase = "prepare" | "accept" | "done";
 
 interface NodeState {
   id: string;
@@ -12,7 +13,11 @@ interface NodeState {
   value: Value | null; 
   isAccepted: boolean;
   promisedN: number;
-  acceptedInfos: string[];
+  acceptedN: number; 
+  acceptedInfos: { n: number; info: string }[];
+  phase: Phase; 
+  chosenValue: Value | null;
+  acceptedCount: number; // Proposerが受け取ったAccept返信の数
 }
 
 interface LogEntry {
@@ -28,21 +33,50 @@ interface MessageAnimation {
   toId: string;
   value: string;
   proposalN: number; 
+  type: "prepare" | "accept" | "promise" | "accepted";
 }
 
 const defaultNodes: NodeState[] = [
-  { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-  { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-  { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-  { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-  { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-  { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-  { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
-  { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedInfos: [] },
+  { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
 ];
 
 const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: number; mode: Mode }) => {
   const isProposer = node.type === "proposer";
+  
+  // Status text logic
+  let statusText = "";
+  if (isProposer) {
+      statusText = node.acceptedInfos.length > 0 
+        ? `Infos: ${node.acceptedInfos.map(i => i.info).join(", ")}` 
+        : "Waiting";
+   } else {
+       if (mode === "P2c") {
+           if (node.isAccepted && node.value) {
+               statusText = `Accepted: N=${node.acceptedN}, Val=${node.value}`;
+           } else if (node.promisedN > 0) {
+               statusText = `Promised: ${node.promisedN}`;
+           } else {
+               statusText = "Idle";
+           }
+       } else {
+          // P1, P2, P2b
+          if (node.value) {
+              statusText = `Val: ${node.value}`;
+          } else if (node.promisedN > 0) {
+              statusText = `Promised: ${node.promisedN}`;
+          } else {
+              statusText = "Idle";
+          }
+      }
+  }
+
   return (
     <div
       className="absolute flex flex-col items-center justify-center transition-all duration-500"
@@ -59,23 +93,18 @@ const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: nu
       >
         {node.id}
       </div>
-      <div className={`mt-1 text-[10px] font-mono px-2 py-0.5 rounded text-center w-24 truncate ${
+      <div className={`mt-1 text-[10px] font-mono px-2 py-0.5 rounded text-center whitespace-normal min-w-[120px] max-w-[200px] ${
         node.isAccepted ? "bg-yellow-600 text-white" : "bg-black/50 text-slate-300"
       }`}>
-        {node.value ? `Val: ${node.value}` : "Empty"}
+        {statusText}
       </div>
-       {!isProposer && mode === "P2" && node.promisedN > 0 && (
-         <div className="text-[8px] text-red-400 font-mono mt-1">Promise: {node.promisedN}</div>
-       )}
-       {!isProposer && mode === "P2b" && node.promisedN > 0 && (
-         <div className="text-[8px] text-orange-400 font-mono mt-1">Accepted: {node.promisedN}</div>
-       )}
-       {!isProposer && mode === "P2c" && node.promisedN > 0 && (
-         <div className="text-[8px] text-purple-400 font-mono mt-1">Promised: {node.promisedN}</div>
-       )}
-       {isProposer && (mode === "P2b" || mode === "P2c") && node.acceptedInfos.length > 0 && (
-         <div className="mt-1 text-[8px] text-cyan-400 font-mono bg-cyan-900/50 px-1 rounded">
-           Infos: {node.acceptedInfos.join(", ")}
+       {/* Phase display for Proposer */}
+       {isProposer && mode === "P2c" && (
+         <div className={`mt-1 text-[8px] font-mono px-1 rounded ${
+           node.phase === "done" ? "text-gray-400 bg-gray-900/50" : 
+           node.phase === "accept" ? "text-pink-400 bg-pink-900/50" : "text-cyan-400 bg-cyan-900/50"
+         }`}>
+           Phase: {node.phase}
          </div>
        )}
     </div>
@@ -120,6 +149,9 @@ const App = () => {
   const [messages, setMessages] = useState<MessageAnimation[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentTab, setCurrentTab] = useState<string>("all");
+  const [canStep, setCanStep] = useState(true);
+  const [canReset, setCanReset] = useState(false);
+  const [lastProposalNumbers, setLastProposalNumbers] = useState<{ [key: string]: number }>({ p1: 0, p2: 0, p3: 0 });
 
   const getPosition = (id: string) => {
     if (id === "p1") return { x: 400, y: 150 };
@@ -139,64 +171,133 @@ const App = () => {
     setLogs((prev) => [{ timestamp: new Date().toLocaleTimeString(), message, targetNodeId, type }, ...prev].slice(0, 150));
   };
 
-  const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN: number) => {
+  const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN: number, type: "prepare" | "accept" | "promise" | "accepted") => {
     const msgId = Math.random().toString(36).substring(7);
     setTimeout(() => {
-      setMessages((prev) => [...prev, { id: msgId, fromId, toId, value, proposalN }]);
+      setMessages((prev) => [...prev, { id: msgId, fromId, toId, value, proposalN, type }]);
       addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", toId);
       addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", fromId);
     }, delay);
   };
 
   const step = async () => {
-    // Clear messages to remove old animations, but keep logs and node state
+    if (!canStep) return;
     setMessages([]);
     
     addLog(`Step executed (Mode: ${mode})...`, "info");
     
-    const shuffle = (array: string[]) => [...array].sort(() => Math.random() - 0.5);
-    
-    const proposalMap: { [key: string]: number } = {
-      "p1": Math.floor(Math.random() * 90) + 10,
-      "p2": Math.floor(Math.random() * 90) + 10,
-      "p3": Math.floor(Math.random() * 90) + 10,
-    };
+    let nextProposalMap: { [key: string]: number };
+    const maxLastN = Math.max(0, ...Object.values(lastProposalNumbers));
 
-    addLog(`Proposal Numbers: p1=${proposalMap.p1}, p2=${proposalMap.p2}, p3=${proposalMap.p3}`, "info");
-
-    setTimeout(() => {
-      addLog("Proposers starting broadcasts...", "info");
-      const proposerOrder = shuffle(["p1", "p2", "p3"]);
+    if (mode === "P2c") {
+      nextProposalMap = { ...lastProposalNumbers };
       
-      const targetsP1 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
-      const targetsP2 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
-      const targetsP3 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
+      const actions = nodes.map(node => {
+        if (node.type !== "proposer") return null;
+        if (node.phase === "done") return null;
+        
+        let proposalN = nextProposalMap[node.id];
+        let val = "";
+        let msgType: "prepare" | "accept";
+        let clearInfos = false;
 
-      const allTargets = [targetsP1, targetsP2, targetsP3];
-      const valueMap: { [key: string]: string } = {
-        "p1": "A",
-        "p2": "B",
-        "p3": "C"
-      };
+        if (node.phase === "prepare") {
+            // Retry or Start
+            proposalN = maxLastN + 1 + Math.floor(Math.random() * 20);
+            nextProposalMap[node.id] = proposalN;
+            val = "Prepare";
+            msgType = "prepare";
+            clearInfos = true;
+        } else if (node.phase === "accept") {
+            val = node.chosenValue || ({ "p1": "A", "p2": "B", "p3": "C" } as any)[node.id] || "X";
+            msgType = "accept";
+        }
 
-      proposerOrder.forEach((pId, idx) => {
-        const targets = allTargets[idx];
-        const val = mode === "P2c" ? "Prepare" : (valueMap[pId] || "X");
+        return { id: node.id, val, proposalN, msgType, clearInfos };
+      }).filter(Boolean);
+      
+      // Update state for clearing infos
+      if (actions.some(a => a.clearInfos)) {
+          setNodes(prev => prev.map(n => {
+              const action = actions.find(a => a.id === n.id);
+              if (action?.clearInfos) {
+                  return { ...n, acceptedInfos: [], acceptedCount: 0 };
+              }
+              return n;
+          }));
+      }
+      
+      // Update proposal numbers state
+      setLastProposalNumbers(nextProposalMap);
+      
+      // Send messages
+      actions.forEach((action: any, idx) => {
+        const actualTargets = shuffle(["a1", "a2", "a3", "a4", "a5"]);
         const baseDelay = 1000 + (idx * 2000); 
-
-        targets.forEach((target, i) => {
-          const proposalN = mode === "P1" ? 0 : proposalMap[pId];
-          sendMessage(pId, target, val, baseDelay + i * 600, proposalN);
+        actualTargets.forEach((target, i) => {
+          sendMessage(action.id, target, action.val, baseDelay + i * 600, action.proposalN, action.msgType);
         });
       });
-    }, 500);
+
+    } else {
+      const n1 = maxLastN + 1 + Math.floor(Math.random() * 50);
+      const n2 = n1 + 1 + Math.floor(Math.random() * 50);
+      const n3 = n2 + 1 + Math.floor(Math.random() * 50);
+      const uniqueNumbers = [n1, n2, n3].sort(() => Math.random() - 0.5);
+      
+      nextProposalMap = {
+        "p1": uniqueNumbers[0],
+        "p2": uniqueNumbers[1],
+        "p3": uniqueNumbers[2],
+      };
+      
+      setLastProposalNumbers(nextProposalMap);
+
+      setTimeout(() => {
+        addLog("Proposers starting broadcasts...", "info");
+        const proposerOrder = shuffle(["p1", "p2", "p3"]);
+        
+        const targetsP1 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
+        const targetsP2 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
+        const targetsP3 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
+
+        const allTargets = [targetsP1, targetsP2, targetsP3];
+        const valueMap: { [key: string]: string } = {
+          "p1": "A",
+          "p2": "B",
+          "p3": "C"
+        };
+
+        proposerOrder.forEach((pId, idx) => {
+          const targets = allTargets[idx];
+          const val = mode === "P2c" ? "Prepare" : (valueMap[pId] || "X");
+          const baseDelay = 1000 + (idx * 2000); 
+
+          targets.forEach((target, i) => {
+            const proposalN = mode === "P1" ? 0 : nextProposalMap[pId];
+            sendMessage(pId, target, val, baseDelay + i * 600, proposalN, mode === "P2c" ? "prepare" : "prepare");
+          });
+        });
+      }, 500);
+    }
+
+    setCanReset(true);
+    if (mode === "P1") {
+      setCanStep(false);
+    }
   };
 
+  const shuffle = (array: string[]) => [...array].sort(() => Math.random() - 0.5);
+
   const reset = () => {
+    if (!canReset) return;
     setNodes(defaultNodes);
     setMessages([]);
     setLogs([]);
     setCurrentTab("all");
+    setCanStep(true);
+    setCanReset(false);
+    setLastProposalNumbers({ p1: 0, p2: 0, p3: 0 });
     addLog("System Reset.", "info");
   };
 
@@ -235,13 +336,15 @@ const App = () => {
         <div className="flex gap-2">
             <button 
             onClick={step}
-            className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95"
+            disabled={!canStep}
+            className={`px-6 py-2 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95 ${canStep ? "bg-green-600 hover:bg-green-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
             >
             Step
             </button>
             <button 
             onClick={reset}
-            className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95"
+            disabled={!canReset}
+            className={`px-4 py-2 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95 ${canReset ? "bg-red-600 hover:bg-red-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
             >
             Reset
             </button>
@@ -292,7 +395,7 @@ const App = () => {
                         const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true } : n);
                         
                         const replyMsgId = Math.random().toString(36).substring(7);
-                        const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `OK:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN };
+                        const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `OK:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN, type: "promise" as const };
                         setMessages(prev => [...prev, replyMsg]);
                         addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
                         addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
@@ -302,29 +405,138 @@ const App = () => {
                         addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
                       }
                     } else if (mode === "P2c") {
-                      if (arrivingMsg.proposalN > targetNode.promisedN) {
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Prepare (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
-                        const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN, value: null, isAccepted: false } : n);
-                        
-                        const replyMsgId = Math.random().toString(36).substring(7);
-                        const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `Promise`, proposalN: arrivingMsg.proposalN };
-                        setMessages(prev => [...prev, replyMsg]);
-                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Promise (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
-                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Promise (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
-                        return updatedNodes;
-                      } else {
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                      if (arrivingMsg.type === "prepare") {
+                        if (arrivingMsg.proposalN > targetNode.promisedN) {
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Prepare (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                          const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN } : n);
+                          
+                          const replyValue = targetNode.acceptedN > 0 ? `Promise:${targetNode.value}:${targetNode.acceptedN}` : (targetNode.value ? `Promise:${targetNode.value}:0` : "Promise");
+                          const replyMsgId = Math.random().toString(36).substring(7);
+                          const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: replyValue, proposalN: arrivingMsg.proposalN, type: "promise" as const };
+                          setMessages(prev => [...prev, replyMsg]);
+                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: ${replyValue} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
+                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: ${replyValue} (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
+                          return updatedNodes;
+                        } else {
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                        }
+                      } else if (arrivingMsg.type === "accept") {
+                        if (arrivingMsg.proposalN >= targetNode.promisedN) {
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Accept (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                          const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, value: arrivingMsg.value, isAccepted: true, acceptedN: arrivingMsg.proposalN } : n);
+                          
+                          const replyMsgId = Math.random().toString(36).substring(7);
+                          const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `Accepted:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN, type: "accepted" as const };
+                          setMessages(prev => [...prev, replyMsg]);
+                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Accepted:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
+                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Accepted:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
+                          return updatedNodes;
+                        } else {
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                          
+                          // Send reject message back to proposer
+                          const rejectMsgId = Math.random().toString(36).substring(7);
+                          const rejectMsg = { id: rejectMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `Rejected:${arrivingMsg.proposalN}`, proposalN: arrivingMsg.proposalN, type: "accepted" as const };
+                          setMessages(prev => [...prev, rejectMsg]);
+                        }
                       }
                     }
                   } else if (targetNode.type === "proposer") {
                     if (mode === "P2b" && arrivingMsg.value.startsWith("OK:")) {
                       const info = arrivingMsg.value.replace("OK:", "");
-                      addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${info} collected`, "success", targetNode.id);
-                      return prevNodes.map(n => n.id === targetNode.id ? { ...n, acceptedInfos: [...n.acceptedInfos, info] } : n);
-                    } else if (mode === "P2c" && arrivingMsg.value === "Promise") {
-                      addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Promise collected`, "success", targetNode.id);
-                      return prevNodes.map(n => n.id === targetNode.id ? { ...n, acceptedInfos: [...n.acceptedInfos, `P(${arrivingMsg.proposalN})`] } : n);
+                      const n = arrivingMsg.proposalN;
+                      return prevNodes.map(node => {
+                        if (node.id === targetNode.id) {
+                          const currentMaxN = node.acceptedInfos.length > 0 ? Math.max(...node.acceptedInfos.map(i => i.n)) : 0;
+                          if (n < currentMaxN) return node;
+                          if (n > currentMaxN) return { ...node, acceptedInfos: [{ n, info }] };
+                          return { ...node, acceptedInfos: [...node.acceptedInfos, { n, info }] };
+                        }
+                        return node;
+                      });
+                     } else if (mode === "P2c") {
+                       if (arrivingMsg.type === "promise") {
+                         const prepareN = arrivingMsg.proposalN;
+                         let info = `P(${prepareN})`;
+                         let promisedValue = null;
+                         let acceptedN = 0;
+                         if (arrivingMsg.value.startsWith("Promise:")) {
+                           const parts = arrivingMsg.value.split(":");
+                           promisedValue = parts[1];
+                           acceptedN = parts[2] ? parseInt(parts[2]) : 0;
+                           info = `P(${prepareN}):${promisedValue}(N=${acceptedN})`;
+                         }
+
+                          return prevNodes.map(node => {
+                            if (node.id === targetNode.id) {
+                              const currentMaxAcceptedN = node.acceptedInfos.length > 0 ? Math.max(...node.acceptedInfos.map(i => i.n)) : 0;
+                              let updatedInfos = node.acceptedInfos;
+                              let currentChosen = node.chosenValue;
+                              let currentHighestN = node.acceptedInfos.length > 0 ? Math.max(...node.acceptedInfos.map(i => i.n)) : 0;
+                              
+                              if (acceptedN > currentHighestN) {
+                                currentChosen = promisedValue;
+                                currentHighestN = acceptedN;
+                                updatedInfos = [{ n: acceptedN, info }];
+                              } else if (acceptedN === currentHighestN && acceptedN > 0) {
+                                updatedInfos = [...node.acceptedInfos, { n: acceptedN, info }];
+                              } else if (acceptedN === 0 && currentHighestN === 0) {
+                                updatedInfos = [...node.acceptedInfos, { n: 0, info }];
+                              }
+                              
+                              let newPhase = node.phase;
+                              if (node.phase === "prepare" && updatedInfos.length >= 3) {
+                                  newPhase = "accept";
+                                  addLog(`${node.id} transitioned to Accept phase (chosenValue: ${currentChosen || "own value"})`, "success", node.id);
+                              }
+                              
+                              return { ...node, acceptedInfos: updatedInfos, chosenValue: currentChosen, phase: newPhase, acceptedCount: newPhase === "accept" ? 0 : node.acceptedCount };
+                            }
+                            return node;
+                          });
+                       } else if (arrivingMsg.type === "accepted") {
+                         if (arrivingMsg.value.startsWith("Rejected:")) {
+                           // Proposer received rejection for its accept request
+                           addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value}`, "error", targetNode.id);
+                           return prevNodes.map(node => {
+                             if (node.id === targetNode.id && node.phase === "accept") {
+                               addLog(`${node.id} rejected, transitioning back to Prepare phase`, "error", node.id);
+                               return { ...node, phase: "prepare", acceptedInfos: [], acceptedCount: 0 };
+                             }
+                             return node;
+                           });
+                         } else {
+                           addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} collected`, "success", targetNode.id);
+                           return prevNodes.map(node => {
+                             if (node.id === targetNode.id) {
+                               const newCount = node.acceptedCount + 1;
+                               let newPhase = node.phase;
+                               if (node.phase === "accept" && newCount >= 3) {
+                                   newPhase = "done";
+                                   addLog(`${node.id} transitioned to Done phase`, "success", node.id);
+                               }
+                               const updatedNode = { ...node, acceptedCount: newCount, phase: newPhase };
+                               
+                               // Check if all proposers are done
+                               setTimeout(() => {
+                                 setNodes(currentNodes => {
+                                   const allProposersDone = currentNodes.filter(n => n.type === "proposer").every(n => n.phase === "done");
+                                   if (allProposersDone) {
+                                     setCanStep(false);
+                                     addLog("All proposers reached Done phase. Simulation complete.", "success");
+                                   }
+                                   return currentNodes;
+                                 });
+                               }, 0);
+                               
+                               return updatedNode;
+                             }
+                             return node;
+                           });
+                         }
+                      }
                     }
                   }
                   return prevNodes;
