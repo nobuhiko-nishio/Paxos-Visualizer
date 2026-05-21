@@ -152,6 +152,7 @@ const App = () => {
   const [canStep, setCanStep] = useState(true);
   const [canReset, setCanReset] = useState(false);
   const [lastProposalNumbers, setLastProposalNumbers] = useState<{ [key: string]: number }>({ p1: 0, p2: 0, p3: 0 });
+  const [networkFault, setNetworkFault] = useState(false);
 
   const getPosition = (id: string) => {
     if (id === "p1") return { x: 400, y: 150 };
@@ -170,6 +171,10 @@ const App = () => {
   const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN: number, type: "prepare" | "accept" | "promise" | "accepted") => {
     const msgId = Math.random().toString(36).substring(7);
     setTimeout(() => {
+      if (networkFault && Math.random() < 0.2) {
+        addLog(`${fromId} -> ${toId}: [DROPPED] ${value} (N=${proposalN})`, "error", "all");
+        return;
+      }
       setMessages((prev) => [...prev, { id: msgId, fromId, toId, value, proposalN, type }]);
       addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", "all");
     }, delay);
@@ -359,6 +364,12 @@ const App = () => {
             className={`px-4 py-2 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95 ${canReset ? "bg-red-600 hover:bg-red-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
             >
             Reset
+            </button>
+            <button 
+            onClick={() => setNetworkFault(!networkFault)}
+            className={`px-4 py-2 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95 ${networkFault ? "bg-orange-600 hover:bg-orange-500" : "bg-slate-600 hover:bg-slate-500"}`}
+            >
+            Network Fault: {networkFault ? "ON" : "OFF"}
             </button>
         </div>
       </div>
