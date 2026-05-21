@@ -167,17 +167,29 @@ const App = () => {
     return { x: 400, y: 350 };
   };
 
-  const addLog = (message: string, type: LogType = "info", targetNodeId?: string) => {
-    setLogs((prev) => [{ timestamp: new Date().toLocaleTimeString(), message, targetNodeId, type }, ...prev].slice(0, 150));
-  };
-
   const sendMessage = (fromId: string, toId: string, value: string, delay: number, proposalN: number, type: "prepare" | "accept" | "promise" | "accepted") => {
     const msgId = Math.random().toString(36).substring(7);
     setTimeout(() => {
       setMessages((prev) => [...prev, { id: msgId, fromId, toId, value, proposalN, type }]);
-      addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", toId);
-      addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", fromId);
+      addLog(`${fromId} -> ${toId}: ${value} (N=${proposalN})`, "info", "all");
     }, delay);
+  };
+
+  const addLog = (message: string, type: LogType = "info", targetNodeId?: string) => {
+    let formattedMessage = message;
+    const arrowMatch = message.match(/^(\w+)\s*->\s*(\w+):(.*)$/);
+    if (arrowMatch) {
+        const from = arrowMatch[1];
+        const to = arrowMatch[2];
+        const rest = arrowMatch[3];
+        const padding = "                          "; // 26 spaces
+        if (targetNodeId === from) {
+            formattedMessage = `${from} ->${padding}${to}:${rest}`;
+        } else if (targetNodeId === to) {
+            formattedMessage = `${from}${padding}-> ${to}:${rest}`;
+        }
+    }
+    setLogs((prev) => [{ timestamp: new Date().toLocaleTimeString(), message: formattedMessage, targetNodeId, type }, ...prev].slice(0, 150));
   };
 
   const step = async () => {
@@ -386,60 +398,54 @@ const App = () => {
                         addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
                         return prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true } : n);
                       } else {
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", "all");
                       }
                     } else if (mode === "P2b") {
                       if (arrivingMsg.proposalN > targetNode.promisedN) {
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "success", "all");
                         const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN, value: arrivingMsg.value, isAccepted: true } : n);
                         
                         const replyMsgId = Math.random().toString(36).substring(7);
                         const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `OK:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN, type: "promise" as const };
                         setMessages(prev => [...prev, replyMsg]);
-                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
-                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
+                        addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: OK:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", "all");
                         return updatedNodes;
                       } else {
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
-                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                        addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", "all");
                       }
                     } else if (mode === "P2c") {
                       if (arrivingMsg.type === "prepare") {
                         if (arrivingMsg.proposalN > targetNode.promisedN) {
-                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Prepare (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Prepare (N=${arrivingMsg.proposalN})`, "success", "all");
                           const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, promisedN: arrivingMsg.proposalN } : n);
                           
                           const replyValue = targetNode.acceptedN > 0 ? `Promise:${targetNode.value}:${targetNode.acceptedN}` : (targetNode.value ? `Promise:${targetNode.value}:0` : "Promise");
                           const replyMsgId = Math.random().toString(36).substring(7);
                           const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: replyValue, proposalN: arrivingMsg.proposalN, type: "promise" as const };
                           setMessages(prev => [...prev, replyMsg]);
-                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: ${replyValue} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
-                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: ${replyValue} (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
+                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: ${replyValue} (N=${arrivingMsg.proposalN})`, "warning", "all");
                           return updatedNodes;
                         } else {
-                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
-                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", "all");
                         }
                       } else if (arrivingMsg.type === "accept") {
                         if (arrivingMsg.proposalN >= targetNode.promisedN) {
-                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Accept (N=${arrivingMsg.proposalN})`, "success", targetNode.id);
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: Accept (N=${arrivingMsg.proposalN})`, "success", "all");
                           const updatedNodes = prevNodes.map(n => n.id === targetNode.id ? { ...n, value: arrivingMsg.value, isAccepted: true, acceptedN: arrivingMsg.proposalN } : n);
                           
                           const replyMsgId = Math.random().toString(36).substring(7);
                           const replyMsg = { id: replyMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `Accepted:${arrivingMsg.value}`, proposalN: arrivingMsg.proposalN, type: "accepted" as const };
                           setMessages(prev => [...prev, replyMsg]);
-                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Accepted:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", arrivingMsg.fromId);
-                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Accepted:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", targetNode.id);
+                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Accepted:${arrivingMsg.value} (N=${arrivingMsg.proposalN})`, "warning", "all");
                           return updatedNodes;
                         } else {
-                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", targetNode.id);
-                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", arrivingMsg.fromId);
+                          addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: (Rejected: N=${arrivingMsg.proposalN})`, "error", "all");
                           
                           // Send reject message back to proposer
                           const rejectMsgId = Math.random().toString(36).substring(7);
                           const rejectMsg = { id: rejectMsgId, fromId: targetNode.id, toId: arrivingMsg.fromId, value: `Rejected:${arrivingMsg.proposalN}`, proposalN: arrivingMsg.proposalN, type: "accepted" as const };
                           setMessages(prev => [...prev, rejectMsg]);
+                          addLog(`${targetNode.id} -> ${arrivingMsg.fromId}: Rejected:${arrivingMsg.proposalN} (N=${arrivingMsg.proposalN})`, "error", "all");
                         }
                       }
                     }
@@ -576,7 +582,7 @@ const App = () => {
           ))}
         </div>
         <div className="flex-1 overflow-y-auto p-2 font-mono text-[10px]">
-          {logs.filter(log => currentTab === "all" || log.targetNodeId === currentTab).map((log, i) => (
+          {logs.filter(log => currentTab === "all" || log.targetNodeId === currentTab || log.message.includes(currentTab)).map((log, i) => (
             <div key={i} className={`mb-1 border-l-2 pl-2 ${
               log.type === "success" ? "border-green-500 text-green-400" : 
               log.type === "error" ? "border-red-500 text-red-400" : 
