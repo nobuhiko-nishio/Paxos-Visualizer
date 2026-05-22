@@ -17,7 +17,8 @@ interface NodeState {
   acceptedInfos: { n: number; info: string }[];
   phase: Phase; 
   chosenValue: Value | null;
-  acceptedCount: number; // Proposerが受け取ったAccept返信の数
+  acceptedCount: number; // Proposerが受け取ったAccept承諾の数
+  rejectedCount: number; // Proposerが受け取ったAccept拒否の数
 }
 
 interface LogEntry {
@@ -37,14 +38,14 @@ interface MessageAnimation {
 }
 
 const defaultNodes: NodeState[] = [
-  { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
-  { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
-  { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
-  { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
-  { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
-  { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
-  { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
-  { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0 },
+  { id: "p1", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
+  { id: "p2", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
+  { id: "p3", type: "proposer", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
+  { id: "a1", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
+  { id: "a2", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
+  { id: "a3", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
+  { id: "a4", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
+  { id: "a5", type: "acceptor", value: null, isAccepted: false, promisedN: 0, acceptedN: 0, acceptedInfos: [], phase: "prepare", chosenValue: null, acceptedCount: 0, rejectedCount: 0 },
 ];
 
 const NodeComponent = ({ node, x, y, mode }: { node: NodeState; x: number; y: number; mode: Mode }) => {
@@ -153,6 +154,7 @@ const App = () => {
   const [canReset, setCanReset] = useState(false);
   const [lastProposalNumbers, setLastProposalNumbers] = useState<{ [key: string]: number }>({ p1: 0, p2: 0, p3: 0 });
   const [networkFault, setNetworkFault] = useState(false);
+  const [proposerGap, setProposerGap] = useState(400);
 
   const getPosition = (id: string) => {
     if (id === "p1") return { x: 400, y: 150 };
@@ -238,7 +240,7 @@ const App = () => {
           setNodes(prev => prev.map(n => {
               const action = actions.find(a => a.id === n.id);
               if (action?.clearInfos) {
-                  return { ...n, acceptedInfos: [], acceptedCount: 0 };
+                  return { ...n, acceptedInfos: [], acceptedCount: 0, rejectedCount: 0 };
               }
               return n;
           }));
@@ -250,9 +252,9 @@ const App = () => {
       // Send messages
       actions.forEach((action: any, idx) => {
         const actualTargets = shuffle(["a1", "a2", "a3", "a4", "a5"]);
-        const baseDelay = 1000 + (idx * 2000); 
+        const baseDelay = 500 + (idx * proposerGap); 
         actualTargets.forEach((target, i) => {
-          sendMessage(action.id, target, action.val, baseDelay + i * 600, action.proposalN, action.msgType);
+            sendMessage(action.id, target, action.val, baseDelay + i * 200, action.proposalN, action.msgType);
         });
       });
 
@@ -274,11 +276,11 @@ const App = () => {
         addLog("Proposers starting broadcasts...", "info");
         const proposerOrder = shuffle(["p1", "p2", "p3"]);
         
-        const targetsP1 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
-        const targetsP2 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
-        const targetsP3 = shuffle(["a1", "a2", "a3", "a4", "a5"]);
-
-        const allTargets = [targetsP1, targetsP2, targetsP3];
+        const targetMap: { [key: string]: string[] } = {
+          "p1": shuffle(["a1", "a2", "a3", "a4", "a5"]),
+          "p2": shuffle(["a1", "a2", "a3", "a4", "a5"]),
+          "p3": shuffle(["a1", "a2", "a3", "a4", "a5"]),
+        };
         const valueMap: { [key: string]: string } = {
           "p1": "A",
           "p2": "B",
@@ -286,16 +288,16 @@ const App = () => {
         };
 
         proposerOrder.forEach((pId, idx) => {
-          const targets = allTargets[idx];
+          const targets = targetMap[pId];
           const val = mode === "P2c" ? "Prepare" : (valueMap[pId] || "X");
-          const baseDelay = 1000 + (idx * 2000); 
+        const baseDelay = 500 + (idx * proposerGap); 
 
           targets.forEach((target, i) => {
             const proposalN = mode === "P1" ? 0 : nextProposalMap[pId];
-            sendMessage(pId, target, val, baseDelay + i * 600, proposalN, mode === "P2c" ? "prepare" : "prepare");
+            sendMessage(pId, target, val, baseDelay + i * 200, proposalN, mode === "P2c" ? "prepare" : "prepare");
           });
         });
-      }, 500);
+      }, 200);
     }
 
     setCanReset(true);
@@ -364,6 +366,12 @@ const App = () => {
             className={`px-4 py-2 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95 ${canReset ? "bg-red-600 hover:bg-red-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
             >
             Reset
+            </button>
+            <button 
+            onClick={() => setProposerGap(proposerGap === 100 ? 400 : 100)}
+            className={`px-4 py-2 rounded text-white font-bold transition-all transform hover:scale-105 active:scale-95 ${proposerGap === 100 ? "bg-red-600 hover:bg-red-500" : "bg-green-700 hover:bg-green-600"}`}
+            >
+            Conflict: {proposerGap === 100 ? "High" : "Low"}
             </button>
             <button 
             onClick={() => setNetworkFault(!networkFault)}
@@ -493,15 +501,10 @@ const App = () => {
                               let currentChosen = node.chosenValue;
                               let currentHighestN = node.acceptedInfos.length > 0 ? Math.max(...node.acceptedInfos.map(i => i.n)) : 0;
                               
-                              if (acceptedN > currentHighestN) {
-                                currentChosen = promisedValue;
-                                currentHighestN = acceptedN;
-                                updatedInfos = [{ n: acceptedN, info }];
-                              } else if (acceptedN === currentHighestN && acceptedN > 0) {
-                                updatedInfos = [...node.acceptedInfos, { n: acceptedN, info }];
-                              } else if (acceptedN === 0 && currentHighestN === 0) {
-                                updatedInfos = [...node.acceptedInfos, { n: 0, info }];
-                              }
+                               if (acceptedN > currentHighestN) {
+                                 currentChosen = promisedValue;
+                               }
+                               updatedInfos = [...node.acceptedInfos, { n: acceptedN, info }];
                               
                               let newPhase = node.phase;
                               if (node.phase === "prepare" && updatedInfos.length >= 3) {
@@ -509,21 +512,26 @@ const App = () => {
                                   addLog(`${node.id} transitioned to Accept phase (chosenValue: ${currentChosen || "own value"})`, "success", node.id);
                               }
                               
-                              return { ...node, acceptedInfos: updatedInfos, chosenValue: currentChosen, phase: newPhase, acceptedCount: newPhase === "accept" ? 0 : node.acceptedCount };
+                               return { ...node, acceptedInfos: updatedInfos, chosenValue: currentChosen, phase: newPhase, acceptedCount: newPhase === "accept" ? 0 : node.acceptedCount, rejectedCount: newPhase === "accept" ? 0 : node.rejectedCount };
                             }
                             return node;
                           });
-                       } else if (arrivingMsg.type === "accepted") {
-                         if (arrivingMsg.value.startsWith("Rejected:")) {
-                           // Proposer received rejection for its accept request
-                           addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value}`, "error", targetNode.id);
-                           return prevNodes.map(node => {
-                             if (node.id === targetNode.id && node.phase === "accept") {
-                               addLog(`${node.id} rejected, transitioning back to Prepare phase`, "error", node.id);
-                               return { ...node, phase: "prepare", acceptedInfos: [], acceptedCount: 0 };
-                             }
-                             return node;
-                           });
+                        } else if (arrivingMsg.type === "accepted") {
+                          if (arrivingMsg.value.startsWith("Rejected:")) {
+                            // Proposer received rejection for its accept request
+                            addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value}`, "error", targetNode.id);
+                            return prevNodes.map(node => {
+                              if (node.id === targetNode.id && node.phase === "accept") {
+                                const newRejectedCount = node.rejectedCount + 1;
+                                if (newRejectedCount >= 3) {
+                                  addLog(`${node.id} rejected by majority (${newRejectedCount}/3), transitioning back to Prepare phase`, "error", node.id);
+                                  return { ...node, phase: "prepare", acceptedInfos: [], acceptedCount: 0, rejectedCount: 0 };
+                                }
+                                addLog(`${node.id} rejected (${newRejectedCount}/3 so far), waiting for more responses`, "warning", node.id);
+                                return { ...node, rejectedCount: newRejectedCount };
+                              }
+                              return node;
+                            });
                          } else {
                            addLog(`${arrivingMsg.fromId} -> ${targetNode.id}: ${arrivingMsg.value} collected`, "success", targetNode.id);
                            return prevNodes.map(node => {
