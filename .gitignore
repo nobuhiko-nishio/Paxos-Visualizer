@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# OpenCode
+.opencode/
+*.db
+*.db-wal
+*.db-shm
+.lock
+
+# Python
+.venv/
+__pycache__/
+.uv/
+
