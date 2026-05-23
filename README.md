@@ -2,6 +2,8 @@
 
 Interactive visualization of the Paxos consensus algorithm. Watch 3 proposers and 5 acceptors communicate via animated message particles across 4 increasingly sophisticated protocol variants.
 
+<img width="1464" height="1074" alt="スクリーンショット 2026-05-23 18 22 23" src="https://github.com/user-attachments/assets/e5edf023-419d-46ef-aba9-40403f005d14" />
+
 ## Getting Started
 
 ```sh
