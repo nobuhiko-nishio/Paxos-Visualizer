@@ -2,6 +2,8 @@
 
 Paxos合意アルゴリズムのインタラクティブ可視化ツール。3つのProposerと5つのAcceptorがアニメーションメッセージを介して通信し、4段階のプロトコルバリアントを順に学習できます。
 
+<img width="1464" height="1074" alt="スクリーンショット 2026-05-23 18 22 23" src="https://github.com/user-attachments/assets/648c271a-9b38-45af-8721-17001cd757fe" />
+
 ## 起動方法
 
 ```sh
