@@ -7,7 +7,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+# JavaScript / Bun
+node_modules/
+.bun/
 dist
 dist-ssr
 *.local
