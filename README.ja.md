@@ -47,32 +47,29 @@ P2と同じ番号付き提案方式に加え、Acceptorが提案者にPromise応
 | **P1 / P2 / P2b / P2c** | モード切替（状態はリセットされます） |
 | **Step** | メッセージブロードキャストを1ラウンド実行 |
 | **Reset** | 全ノード・ログ・提案番号をリセット |
-| **Conflict** | Proposer間の間隔を100ms（High）／400ms（Low）で切替 |
+| **Conflict** | Low / High を切替。High は proposer間隔100ms＋target間隔400msで競合を増やし、Low は proposer間隔400ms＋target間隔200msでクリーンな実行に。 |
 | **Network Fault** | ONにすると20%のメッセージがランダムに消失 |
 
 ## ノードの見方
 
 ### Proposer（青枠）
-- `Infos: ...` に収集したPromise/Acceptedメッセージを表示
-- P2cモードでは現在の `Phase: prepare / accept / done` を表示
+- P2/P2b/P2cモード：`Waiting (N=xx)` に現在の提案番号を表示。収集した応答は `Infos: ...`
+- P1モード：提案番号なしの `Waiting` のみ表示
+- P2cモードでは現在の `Phase: prepare / accept / done` も表示
 
 ### Acceptor
 - **緑枠** — 未承諾（値もPromiseもなし）
 - **黄枠** — 値を受け入れ済み
-- `Promised: {N}` または `Val: {value}` または `Accepted: N={n}, Val={value}` を表示
+- `Val: {value} (N={n})`（P2/P2b）、`Accepted: N={n}, Val={value}`（P2c）、または `Promised: N={n}` を表示
 
-## ログパネル（右下）
+## ステップサマリー
 
-イベントログは色分け表示されます：
+各Step完了後、イベントログの最上部に自動で1行サマリーが表示されます：
 
-| 色 | 意味 |
-|----|------|
-| 青 | 情報（ステップ実行、メッセージ送信） |
-| 緑 | 成功（承認、フェーズ遷移、完了） |
-| 赤 | エラー（拒否、メッセージ消失、フォールバック） |
-| 黄 | 警告（Promise/Accepted応答） |
-
-タブボタンで特定のノードに関連するメッセージのみにフィルタリングできます。
+- **P1**: `Value 'A' was chosen. P1's proposal reached acceptors first.` または `No consensus reached. Acceptors split: A(x2), B(x2), C(x1).`
+- **P2**: `P1 led with N=45: accepted by 3/5 acceptors, value 'A'.`
+- **P2b**: `P1 (N=45) collected 3 promise replies (highest discovered: 'A' N=45).`
+- **P2c**: `P1 reached consensus! Value 'A' was chosen.` / `P1 (N=50) collected majority Promises, but consensus not yet reached.` / `P1 (N=50) collected 2/3 Promises, not enough for majority.`
 
 ## メッセージタイミングモデル
 
@@ -80,9 +77,9 @@ Step押下時、全Proposerが同時にオフセット付きでブロードキ�
 
 - **先頭Proposer**: `500ms` から開始
 - **後続Proposer**: `+ proposerGap`（100ms: High / 400ms: Low）
-- **同一Proposer内の各ターゲット**: `+ 200ms` 間隔
+- **同一Proposer内の各ターゲット**: `+ targetGap`（400ms: High / 200ms: Low）
 
-メッセージのアニメーションは送信元から送信先まで約2.5秒かかります。
+メッセージのアニメーションは送信元から送信先まで約2.5秒かかります。応答メッセージがあるモード（P2b, P2c）では、返信アニメーションにもさらに2.5秒かかります。
 
 ## アーキテクチャ
 

@@ -49,32 +49,29 @@ Full two-phase Paxos protocol (Prepare + Accept). Proposers maintain state acros
 | **P1 / P2 / P2b / P2c** | Switch mode (resets all state) |
 | **Step** | Execute one round of message broadcasts |
 | **Reset** | Reset all nodes, logs, and proposal numbers |
-| **Conflict** | Toggle proposer gap between 100ms (High) and 400ms (Low) |
+| **Conflict** | Toggle between Low and High contention. High uses 100ms proposer gap + 400ms target gap to increase vote splitting. Low uses 400ms proposer gap + 200ms target gap for cleaner runs. |
 | **Network Fault** | When ON, 20% of messages are randomly dropped |
 
 ## Node Visual Reference
 
 ### Proposer (blue border)
-- Shows `Infos: ...` listing collected promise/accepted messages
-- In P2c mode, shows current `Phase: prepare / accept / done`
+- In P2/P2b/P2c modes: shows `Waiting (N=xx)` with its current proposal number, or `Infos: ...` listing collected responses
+- In P1 mode: shows `Waiting` (no proposal numbers used)
+- In P2c mode, also shows current `Phase: prepare / accept / done`
 
 ### Acceptor
 - **Green border** — Idle (no value, no promise)
 - **Yellow border** — Has accepted a value
-- Shows `Promised: {N}` or `Val: {value}` or `Accepted: N={n}, Val={value}`
+- Shows `Val: {value} (N={n})` (P2/P2b), `Accepted: N={n}, Val={value}` (P2c), or `Promised: N={n}`
 
-## Log Panel (bottom-right)
+## Step Summary
 
-Color-coded event log:
+After each Step completes, a one-line summary automatically appears at the top of the event log:
 
-| Color | Meaning |
-|-------|---------|
-| Blue | Info (step execution, message sends) |
-| Green | Success (accepts, phase transitions, completion) |
-| Red | Error (rejections, dropped messages, fallbacks) |
-| Yellow | Warning (promise/accept replies) |
-
-Tab buttons filter the log to show only messages relevant to a specific node.
+- **P1**: `Value 'A' was chosen. P1's proposal reached acceptors first.` or `No consensus reached. Acceptors split: A(x2), B(x2), C(x1).`
+- **P2**: `P1 led with N=45: accepted by 3/5 acceptors, value 'A'.`
+- **P2b**: `P1 (N=45) collected 3 promise replies (highest discovered: 'A' N=45).`
+- **P2c**: `P1 reached consensus! Value 'A' was chosen.` / `P1 (N=50) collected majority Promises, but consensus not yet reached.` / `P1 (N=50) collected 2/3 Promises, not enough for majority.`
 
 ## Message Timing Model
 
@@ -82,9 +79,9 @@ When Step is pressed, all proposers broadcast simultaneously with staggered dela
 
 - **First proposer**: starts at `500ms`
 - **Each subsequent proposer**: `+ proposerGap` (100ms High / 400ms Low)
-- **Each target within a proposer**: `+ 200ms` between consecutive targets
+- **Each target within a proposer**: `+ targetGap` (400ms High / 200ms Low)
 
-Message animation takes approximately 2.5 seconds to travel from source to destination.
+Message animation takes approximately 2.5 seconds to travel from source to destination. In modes with response messages (P2b, P2c), the round-trip animation adds another 2.5 seconds for the reply.
 
 ## Architecture
 
